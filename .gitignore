@@ -1,0 +1,19 @@
+# Build intermediates
+mxrider/obj/
+mxrider/bin/
+*.obj
+*.pdb
+*.exp
+*.ilk
+*.lib
+
+# Third-party checkouts used for reference / staging only.
+# build.bat expects ViGEmClient.dll at reference/vigem/bin/release/x64/.
+reference/
+
+# Local agent state
+.freebuff/
+
+# Runtime output, if the log directory is pointed at the repo
+*.log
+mxrider_run_*.csv
