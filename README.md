@@ -68,7 +68,8 @@ different slot name, bind both — the game remembers one set per device.
 1. Load a race or free ride, and sit on the bike at the start.
 2. **Record the line** — this is what the rider follows. Press **F5**, ride one clean lap yourself,
    press **F5** again. It writes `mxrider_line.csv` (only the last recorded lap is kept).
-3. Press **F7**. The rider takes over: pure-pursuit steering onto the line plus a speed hold.
+3. Press **F7**. The rider takes over: pure-pursuit steering onto the line, and a speed that follows
+   the bends - fast down the straights, already braking when the corner arrives.
 4. Press **F7** again to hand it back. It releases every control when disabled, so the bike rolls to a
    stop rather than being driven into a wall.
 
@@ -88,9 +89,14 @@ The values that matter when it is not driving well:
 
 | Key | Meaning | Shipping value |
 | --- | --- | --- |
-| `TargetSpeed` | speed the throttle/brake loop holds, game units/s | `27.0` |
+| `TargetSpeed` | straight-line ceiling, game units/s - bends slow it automatically | `52.0` |
 | `SpeedGain` | throttle/brake per unit of speed error | `0.30` |
-| `Lookahead` | how far up the line the rider aims | `28.0` |
+| `CornerGrip` | cornering grip the planner trusts, units/s² - **drop this first if it slides** | `26.0` |
+| `BrakeDecel` | braking the planner plans with, units/s² - lower brakes earlier | `22.0` |
+| `BrakeReach` | how far along the line it looks for bends, units | `120.0` |
+| `RearBrakeShare` | share of the braking on the rear wheel, which keeps it turning in | `0.25` |
+| `MaxSteerRate` | how fast the bars may move, stick units/s - lower if it looks twitchy | `8.0` |
+| `Lookahead` | furthest up the line the rider aims (grows with speed) | `45.0` |
 | `SteerGain` | steering per radian of heading error | `0.30` |
 | `CrossGain` | steering per unit of sideways offset from the line | `0.04` |
 | `YawDamp` | counter-steer per rad/s of yaw — this is the anti-slide term | `0.15` |
@@ -104,9 +110,19 @@ the triggers, and the button bits in `[Pad]` change which button is the rear bra
 
 ### It is sliding
 
-Lower `TargetSpeed` first — grip is the limit, not the controller. Then raise `YawDamp` (0.25 arrests a
-slide harder; 0.08 is looser if the bike fights its own turn-in). If the bike is dabbing and sitting,
-keep `LeanGain` at `0`.
+Lower `CornerGrip` first: that is the grip the planner trusts in a bend, and 26 is roughly what held
+at 27 units/s on the track it was tuned on. 20 brakes earlier and slows the middle of the corner.
+Then raise `YawDamp` (0.25 arrests a slide harder; 0.08 is looser if the bike fights its own turn-in).
+If the bike is dabbing and sitting, keep `LeanGain` at `0`.
+
+### It is slow
+
+The speed is no longer one number for the whole lap. `TargetSpeed` is the straight-line ceiling and
+the corner settings decide the rest, which is why the default moved from 27 to 52. Slow overall:
+raise `TargetSpeed`. Slow *into* the corners: raise `CornerGrip`. Running wide instead of turning in:
+lower `CornerGrip` first, then `BrakeDecel` — a weaker `BrakeDecel` means it starts braking earlier.
+The log prints `rider: N units/s (line allows M)` every five seconds, so you can see which of the two
+limits is the one holding it back.
 
 ### It is not driving at all
 
@@ -155,8 +171,9 @@ the design notes, the observation/action layout and the trainer are in
 * **No crash flag exists.** A crash is inferred (bike on its side, or a respawn-sized jump), so a fall
   that leaves the bike upright just looks like a bad lap.
 * **It follows one recorded line.** No track geometry, no planning around obstacles or jumps.
-* **It is a learner's baseline**, not a fast rider: it holds a line at a modest pace. It will not beat
-  you, and on tight or rough sections it may need a lower `TargetSpeed`.
+* **It is a line follower**, not a racer: it uses the bend radii of the lap you recorded, so it knows
+  nothing about ruts, braking bumps or jumps, and a line recorded slowly describes a slow line. It will
+  not beat you, and on tight or rough sections it may need a lower `CornerGrip`.
 
 ## Credits
 

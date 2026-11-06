@@ -79,9 +79,11 @@ rider drives, or it will fight the rider for control. The mod does not hide real
 1. **Record the line.** In a race, stand on the track and press F6 twice (to `record-line`), ride one
    clean lap, then F5. The centreline is written to `mxrider_line.csv`. This is what makes laps
    measurable and what the baseline steers by.
-2. **Baseline.** F6 → `baseline`. Pure pursuit along the line plus a speed hold. It is deliberately
-   simple: it establishes a reward and lap-time baseline, and it exercises the whole loop
-   (state → action → pad → state) without any learning.
+2. **Baseline.** F6 → `baseline`. Pure pursuit along the line, with a corner-aware speed: every bend
+   within braking range sets the speed the bike must already be down to, so it runs to `TargetSpeed`
+   where the line is straight and brakes into the turns. It is deliberately simple - it establishes
+   the reward and lap-time baseline, and exercises the whole loop (state → action → pad → state)
+   without any learning - but it is quick enough now to be worth watching on its own.
 3. **Human logging.** While in `record-line` the mod also reads the *real* controller and logs it
    next to the bike state. That is the imitation data the first policy is trained from.
 4. **Train.** From `train/`:

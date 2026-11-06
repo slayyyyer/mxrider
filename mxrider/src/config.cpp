@@ -205,6 +205,13 @@ void ReloadConfig()
     c.leanGain    = ReadDouble(L"Line", L"LeanGain", c.leanGain);
     c.lapRadius   = ReadDouble(L"Line", L"LapRadius", c.lapRadius);
     c.speedGain   = ReadDouble(L"Line", L"SpeedGain", c.speedGain);
+    c.cornerGrip  = ReadDouble(L"Line", L"CornerGrip", c.cornerGrip);
+    c.brakeDecel  = ReadDouble(L"Line", L"BrakeDecel", c.brakeDecel);
+    c.brakeReach  = ReadDouble(L"Line", L"BrakeReach", c.brakeReach);
+    c.rearBrakeShare = ReadDouble(L"Line", L"RearBrakeShare", c.rearBrakeShare);
+    c.maxSteerRate   = ReadDouble(L"Line", L"MaxSteerRate", c.maxSteerRate);
+    c.maxThrottleRate = ReadDouble(L"Line", L"MaxThrottleRate", c.maxThrottleRate);
+    c.minSpeed    = ReadDouble(L"Line", L"MinSpeed", c.minSpeed);
 
     c.frontBrakeTrigger = ReadInt(L"Pad", L"FrontBrakeTrigger", c.frontBrakeTrigger);
     c.clutchButton      = ReadInt(L"Pad", L"ClutchButton", c.clutchButton);
@@ -235,6 +242,13 @@ void ReloadConfig()
     c.leanGain          = Clamp(c.leanGain, 0.0, 1.0);
     c.lapRadius         = Clamp(c.lapRadius, 1.0, 200.0);
     c.speedGain         = Clamp(c.speedGain, 0.0, 50.0);
+    c.cornerGrip        = Clamp(c.cornerGrip, 1.0, 400.0);
+    c.brakeDecel        = Clamp(c.brakeDecel, 1.0, 400.0);
+    c.brakeReach        = Clamp(c.brakeReach, 10.0, 1000.0);
+    c.rearBrakeShare    = Clamp(c.rearBrakeShare, 0.0, 1.0);
+    c.maxSteerRate      = Clamp(c.maxSteerRate, 0.5, 200.0);
+    c.maxThrottleRate   = Clamp(c.maxThrottleRate, 0.2, 200.0);
+    c.minSpeed          = Clamp(c.minSpeed, 0.0, 200.0);
     c.frontBrakeTrigger = c.frontBrakeTrigger != 0 ? 1 : 0;
     c.stickDeadzone     = Clamp(c.stickDeadzone, 0.0, 0.5);
     c.csvFlushSeconds   = Clamp(c.csvFlushSeconds, 0.25, 60.0);

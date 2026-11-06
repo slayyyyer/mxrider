@@ -51,6 +51,13 @@ struct Config {
     double leanGain      = 0.004; // lean per degree of nose-up pitch
     double lapRadius     = 8.0;   // how near the line's start counts as crossing it
     double speedGain     = 0.15;  // throttle / brake per unit of speed error
+    double cornerGrip    = 26.0;  // units/s^2 of grip the speed planner assumes it has in a bend
+    double brakeDecel    = 22.0;  // units/s^2 it plans to brake with; deliberately weaker than the bike
+    double brakeReach    = 120.0; // units along the line it looks for bends
+    double rearBrakeShare = 0.25; // share of the braking on the rear wheel, which keeps it turning in
+    double maxSteerRate  = 8.0;   // stick units per second: how fast the bars may be turned
+    double maxThrottleRate = 6.0; // trigger units per second
+    double minSpeed      = 8.0;   // never ask for less than this, however tight the bend
 
     // [Pad] which physical control of the virtual pad carries which game input. The defaults
     // match the layout documented in README.md; bind the game's controller settings to match.

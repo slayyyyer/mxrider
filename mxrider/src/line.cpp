@@ -25,6 +25,12 @@ namespace {
 constexpr double kMinSpacing = 1.5;
 constexpr int    kMaxPoints  = 200000;
 
+// A bend radius is measured over this many points either side - a chord of roughly 12 units. Long
+// enough that point jitter does not read as a corner, short enough to see a rut.
+constexpr int    kCurveSpan  = 4;
+// How far apart the bend samples handed to the speed planner are, in units along the line.
+constexpr double kSampleSpacing = 4.0;
+
 // The projection searches a window around the last segment it found first (the bike moves
 // forwards along the line), then falls back to a full scan when the line is new or teleported.
 constexpr int kSearchWindow = 60;
@@ -58,6 +64,32 @@ double ClosestOnSegment(const Vec3& a, const Vec3& b, const Vec3& p, double& dis
     const double cx = a.x + dx * t, cz = a.z + dz * t;
     distance = std::sqrt((p.x - cx) * (p.x - cx) + (p.z - cz) * (p.z - cz));
     return t;
+}
+
+double HorizontalDistance(const Vec3& a, const Vec3& b)
+{
+    const double dx = b.x - a.x, dz = b.z - a.z;
+    return std::sqrt(dx * dx + dz * dz);
+}
+
+// Radius of the bend at point i, from the angle between the two chords through it. A straight
+// stretch reports the "no bend" radius instead of infinity, so nothing downstream divides by zero.
+double RadiusAt(int i, int segments)
+{
+    const auto wrap = [segments](int k) { k %= segments; return k < 0 ? k + segments : k; };
+    const Vec3& a = g_points[wrap(i - kCurveSpan)];
+    const Vec3& b = g_points[wrap(i)];
+    const Vec3& c = g_points[wrap(i + kCurveSpan)];
+    const double ux = b.x - a.x, uz = b.z - a.z;
+    const double vx = c.x - b.x, vz = c.z - b.z;
+    const double lu = std::sqrt(ux * ux + uz * uz);
+    const double lv = std::sqrt(vx * vx + vz * vz);
+    if (lu < 1e-6 || lv < 1e-6)
+        return 1e9;
+    const double turn = std::acos(Clamp((ux * vx + uz * vz) / (lu * lv), -1.0, 1.0));
+    if (turn < 1e-4)
+        return 1e9;
+    return 0.5 * (lu + lv) / turn;
 }
 
 }  // namespace
@@ -262,6 +294,7 @@ Projection Project(const double position[3], double lookahead)
     out.valid = true;
     out.segment = bestIndex;
     out.progress = (bestIndex + bestT) / static_cast<double>(segments);
+    out.t = bestT;
 
     // Signed sideways offset: positive when the bike is to the right of the direction of travel
     // (in x/z, with y up). Whether that is the sign the game calls "right" is what SteerSign in
@@ -319,6 +352,37 @@ Projection Project(const double position[3], double lookahead)
     }
     g_lastProgress = out.progress;
     return out;
+}
+
+int ScanAhead(const Projection& projection, double reach, BendSample* out, int maxCount)
+{
+    if (!projection.valid || !out || maxCount <= 0 || !Loaded())
+        return 0;
+
+    const int segments = static_cast<int>(g_points.size()) - 1;
+    const int start = projection.segment;
+    if (start < 0 || start >= segments)
+        return 0;
+
+    double travelled = (1.0 - Clamp(projection.t, 0.0, 1.0)) *
+                       HorizontalDistance(g_points[start], g_points[start + 1]);
+    double nextSample = 0.0;  // the bend the bike is in right now counts too
+    int written = 0;
+    int index = start + 1;
+    for (int guard = 0; guard <= segments && written < maxCount && travelled <= reach; ++guard) {
+        if (index >= segments)
+            index = 0;  // the line is a closed loop
+        const double length = HorizontalDistance(g_points[index], g_points[index + 1]);
+        if (travelled >= nextSample) {
+            out[written].distance = travelled;
+            out[written].radius = RadiusAt(index, segments);
+            ++written;
+            nextSample += kSampleSpacing;
+        }
+        travelled += length;
+        ++index;
+    }
+    return written;
 }
 
 bool LapCompleted() { return g_lapCompleted; }

@@ -50,6 +50,9 @@ Policy g_policy;
 bool   g_policyTried = false;
 
 Action g_previous;            // what we submitted last frame (part of the observation)
+Action g_lastSent;            // what the pad was actually told, so inputs can be rate limited
+double g_lastTarget = 0.0;    // the speed the line allowed this frame, for the status log
+double g_lastStatusLog = 0.0; // game time of the last "how is it going" line
 bool   g_havePreviousPos = false;
 double g_previousPos[3] = {};
 bool   g_haveProjection = false;
@@ -103,6 +106,7 @@ void StartEpisode(const char* why)
     g_pendingReason = "";
     g_havePreviousPos = false;
     g_previous = Action{};
+    g_lastSent = Action{};
     g_lapAtStart = line::Laps();
     Log("episode %d begins (%s, mode=%s, lap %d)", g_episode, why, ModeName(g_mode), g_lapAtStart + 1);
 }
@@ -115,6 +119,39 @@ void EndEpisode(const char* reason)
     Log("episode %d ended (%s): %d frames, %.1f s, return %.2f, laps %d", g_episode, reason,
         g_episodeFrames, g_episodeTime, g_episodeReturn, g_lapsSeen - g_lapAtStart);
     g_pendingReason = reason;
+}
+
+// The fastest the recorded line says is safe right now. Every bend within braking range sets the
+// speed the bike must already be down to (v^2 = corner^2 + 2 * a * distance) and the tightest
+// answer wins. Without this the rider held one speed for the whole lap: too slow on the straights
+// and still too quick for the tight stuff, which is exactly how it felt to ride behind.
+double SpeedTarget(const Config& cfg)
+{
+    double limit = cfg.targetSpeed;
+    line::BendSample bends[120];
+    const int count = line::ScanAhead(g_projection, cfg.brakeReach, bends, 120);
+    for (int i = 0; i < count; ++i) {
+        const double corner = std::sqrt(cfg.cornerGrip * bends[i].radius);
+        const double distance = bends[i].distance > 0.0 ? bends[i].distance : 0.0;
+        const double allowed = std::sqrt(corner * corner + 2.0 * cfg.brakeDecel * distance);
+        if (allowed < limit)
+            limit = allowed;
+    }
+    return limit > cfg.minSpeed ? limit : cfg.minSpeed;
+}
+
+// Rate limits the stick and the throttle, so one noisy frame cannot snap either of them: turning a
+// bike is a continuous thing, and the first version let the stick jump from lock to lock.
+Action RateLimited(const Action& want, const Action& previous, double dt, const Config& cfg)
+{
+    if (!(dt > 0.0))
+        return want;
+    Action out = want;
+    const double steerStep = cfg.maxSteerRate * dt;
+    out.steer = previous.steer + Clamp(want.steer - previous.steer, -steerStep, steerStep);
+    const double throttleStep = cfg.maxThrottleRate * dt;
+    out.throttle = previous.throttle + Clamp(want.throttle - previous.throttle, -throttleStep, throttleStep);
+    return out;
 }
 
 // Turns the projection onto the line into a steering target. Pure pursuit: aim at a point a
@@ -146,12 +183,18 @@ Action BaselineAction(const State& s)
                          cfg.yawDamp * yawRate;
     a.steer = Clamp(steer, -1.0, 1.0);
 
-    // Hold the target speed; a little lean into the throttle keeps the nose down.
-    const double speedError = cfg.targetSpeed - s.forwardSpeed;
-    if (speedError > 0.0)
+    // Hold the speed the line allows. The front wheel does the stopping and a little rear brake
+    // trails it, so the bike keeps rotating into the bend instead of standing up and running wide.
+    const double target = SpeedTarget(cfg);
+    g_lastTarget = target;
+    const double speedError = target - s.forwardSpeed;
+    if (speedError > 0.0) {
         a.throttle = Clamp(speedError * cfg.speedGain, 0.0, 1.0);
-    else
-        a.brakeRear = Clamp(-speedError * cfg.speedGain, 0.0, 1.0);
+    } else {
+        const double brake = Clamp(-speedError * cfg.speedGain, 0.0, 1.0);
+        a.brakeFront = brake;
+        a.brakeRear = brake * cfg.rearBrakeShare;
+    }
     a.lean = Clamp(cfg.leanSign * cfg.leanGain * (s.pitchDeg > 0.0 ? s.pitchDeg : 0.0), 0.0, 1.0);
     return a;
 }
@@ -266,7 +309,7 @@ void Frame()
         // Pure pursuit needs a target that moves with the bike. A fixed 20-unit lookahead is a
         // reasonable aim for a bike at speed, but from a standstill it points metres off to the
         // side, which saturates the steering (measured: 79% of frames at full lock, mean +0.82).
-        const double lookahead = Clamp(6.0 + 0.45 * state.forwardSpeed, 6.0, cfg.lookahead);
+        const double lookahead = Clamp(6.0 + 0.70 * state.forwardSpeed, 6.0, cfg.lookahead);
         g_projection = line::Project(state.pos, lookahead);
         g_haveProjection = g_projection.valid;
         if (g_projection.valid)
@@ -287,6 +330,7 @@ void Frame()
         // was early: that is still a leaning bike, so the rider was handed throttle while the bike
         // was going over, which is exactly when it dabs a foot, sits down and falls again.
         pad::Release();
+        g_lastSent = Action{};
         const bool upright = state.valid && state.upright > cfg.resumeUpright;
         g_uprightTime = upright ? g_uprightTime + dt : 0.0;
         if (upright && g_uprightTime >= cfg.resumeSettle) {
@@ -307,6 +351,7 @@ void Frame()
         // Never detach while the game runs: it enumerated controllers at startup, so a pad
         // created later is invisible to it. Attached and centred is already "doing nothing".
         pad::Release();
+        g_lastSent = Action{};
         EndEpisode("rider off");
 
         if (g_mode == Mode::RecordLine && state.valid) {
@@ -327,6 +372,7 @@ void Frame()
     if (!state.valid) {
         // No bike this frame: release the controls, and end the episode if it stays that way.
         pad::Release();
+        g_lastSent = Action{};
         g_lostTime += dt;
         if (g_episodeOpen && g_lostTime > kLostSeconds)
             EndEpisode("bike lost");
@@ -336,6 +382,7 @@ void Frame()
     AttachPadIfDriving();
     if (!pad::Attached()) {
         pad::Release();
+        g_lastSent = Action{};
         return;
     }
 
@@ -374,7 +421,18 @@ void Frame()
     }
 
     action = action.Sanitized();
+    action = RateLimited(action, g_lastSent, dt, cfg);
+    action = action.Sanitized();
     pad::Submit(action);
+    g_lastSent = action;
+
+    // A slow pulse of what the rider is actually doing, so a session can be judged from the log.
+    if (state.time - g_lastStatusLog >= 5.0) {
+        g_lastStatusLog = state.time;
+        Log("rider: %.1f units/s (line allows %.1f), upright %.2f, %+.1f off the line",
+            state.forwardSpeed, g_lastTarget, state.upright,
+            g_projection.valid ? g_projection.crossTrack : 0.0);
+    }
 
     // Reward and episode end conditions.
     const double reward = RewardFor(state, action);
@@ -427,6 +485,7 @@ void ToggleEnabled()
     Log("rider: %s (mode=%s)", g_enabled ? "ON" : "OFF", ModeName(g_mode));
     if (!g_enabled) {
         pad::Release();
+        g_lastSent = Action{};
         g_havePreviousPos = false;
     }
 }
@@ -454,6 +513,7 @@ void CycleMode()
         AttachPadIfDriving();
     } else {
         pad::Release();
+        g_lastSent = Action{};
     }
     EndEpisode("mode change");
 }
