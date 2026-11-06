@@ -132,6 +132,7 @@ Read `mxrider.log` first — it names the failure:
 | --- | --- |
 | `LOOKING FOR THE BIKE` | the tracker has not locked on; check `BikeSearchRadius` and the uniform names in `[Detection]` |
 | `pad: none` / `pad: ViGEm unavailable` | ViGEmBus is not installed or not running |
+| `pad: virtual pad is XInput slot 1, not slot 0` | another controller is plugged in and owns slot 0; the game reads only `XInputGamepad0`, so unplug it (or switch it off) and start the game again |
 | `line: no line loaded` | no `mxrider_line.csv`; record one with F5 |
 | `rider: waiting` (repeated) | it crashed and is waiting for the bike to be upright — reset with the game's own reset key |
 

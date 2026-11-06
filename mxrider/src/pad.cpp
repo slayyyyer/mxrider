@@ -63,6 +63,7 @@ using PFN_vigem_target_free        = void (WINAPI*)(PVIGEM_TARGET);
 using PFN_vigem_target_add         = VIGEM_ERROR (WINAPI*)(PVIGEM_CLIENT, PVIGEM_TARGET);
 using PFN_vigem_target_remove      = VIGEM_ERROR (WINAPI*)(PVIGEM_CLIENT, PVIGEM_TARGET);
 using PFN_vigem_target_x360_update = VIGEM_ERROR (WINAPI*)(PVIGEM_CLIENT, PVIGEM_TARGET, XUSB_REPORT);
+using PFN_vigem_x360_get_index = VIGEM_ERROR (WINAPI*)(PVIGEM_CLIENT, PVIGEM_TARGET, unsigned long*);
 
 struct Api {
     HMODULE module = nullptr;
@@ -75,6 +76,7 @@ struct Api {
     PFN_vigem_target_add         targetAdd = nullptr;
     PFN_vigem_target_remove      targetRemove = nullptr;
     PFN_vigem_target_x360_update targetUpdate = nullptr;
+    PFN_vigem_x360_get_index  x360GetIndex = nullptr;  // optional: which slot we landed in
     bool complete() const
     {
         return alloc && free && connect && disconnect && targetAlloc && targetFree &&
@@ -129,6 +131,7 @@ bool BindApi()
     Bind(g_api.module, g_api.targetAdd, "vigem_target_add");
     Bind(g_api.module, g_api.targetRemove, "vigem_target_remove");
     Bind(g_api.module, g_api.targetUpdate, "vigem_target_x360_update");
+    Bind(g_api.module, g_api.x360GetIndex, "vigem_target_x360_get_user_index");
     if (!g_api.complete()) {
         g_status = "NO PAD (client API incomplete)";
         Log("pad: ViGEmClient.dll is missing expected exports; not driving");
@@ -206,6 +209,21 @@ bool Attach()
     }
 
     g_status = "VIRTUAL PAD";
+
+    // Which XInput slot the pad landed in decides whether the game can see it at all. MX Simulator
+    // reads the controller its bindings name (XInputGamepad0), so a pad in any other slot is live
+    // and centred as far as the game is concerned: the rider presses buttons nobody reads.
+    unsigned long slot = 0xFFFFFFFFul;
+    if (g_api.x360GetIndex &&
+        g_api.x360GetIndex(g_client, g_target, &slot) == kVigemErrorSuccess) {
+        if (slot == 0) {
+            Log("pad: virtual pad is XInput slot 0, the slot the game's bindings point at");
+        } else {
+            Log("pad: virtual pad is XInput slot %lu, not slot 0: another controller is plugged in."
+                " The game reads XInputGamepad0 only, so nothing the rider presses arrives - unplug"
+                " (or switch off) the other pad, start the game again and press the rider key", slot);
+        }
+    }
     Log("pad: virtual Xbox 360 pad attached (throttle=RT, front brake=%s trigger, rear brake=B,"
         " clutch=A, steer=left X, lean=left Y)",
         cfg.frontBrakeTrigger == 0 ? "LT (left)" : "RT (right)");
