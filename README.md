@@ -89,12 +89,14 @@ The values that matter when it is not driving well:
 
 | Key | Meaning | Shipping value |
 | --- | --- | --- |
-| `TargetSpeed` | straight-line ceiling, game units/s - bends slow it automatically | `52.0` |
+| `TargetSpeed` | straight-line ceiling, game units/s - bends and being off the line both cut it | `44.0` |
 | `SpeedGain` | throttle/brake per unit of speed error | `0.30` |
 | `CornerGrip` | cornering grip the planner trusts, units/s² - **drop this first if it slides** | `26.0` |
 | `BrakeDecel` | braking the planner plans with, units/s² - lower brakes earlier | `22.0` |
 | `BrakeReach` | how far along the line it looks for bends, units | `120.0` |
 | `RearBrakeShare` | share of the braking on the rear wheel, which keeps it turning in | `0.25` |
+| `LineTolerance` | how far off the line still counts as on it; further off, the speed target drops fast | `6.0` |
+| `LaunchThrottle` | throttle cap below `LaunchSpeed`, so it cannot loop itself out from a standstill | `0.55` |
 | `MaxSteerRate` | how fast the bars may move, stick units/s - lower if it looks twitchy | `8.0` |
 | `Lookahead` | furthest up the line the rider aims (grows with speed) | `45.0` |
 | `SteerGain` | steering per radian of heading error | `0.30` |
@@ -118,11 +120,16 @@ If the bike is dabbing and sitting, keep `LeanGain` at `0`.
 ### It is slow
 
 The speed is no longer one number for the whole lap. `TargetSpeed` is the straight-line ceiling and
-the corner settings decide the rest, which is why the default moved from 27 to 52. Slow overall:
+the corner settings decide the rest, which is why the default moved from 27 to 44. Slow overall:
 raise `TargetSpeed`. Slow *into* the corners: raise `CornerGrip`. Running wide instead of turning in:
 lower `CornerGrip` first, then `BrakeDecel` — a weaker `BrakeDecel` means it starts braking earlier.
 The log prints `rider: N units/s (line allows M)` every five seconds, so you can see which of the two
 limits is the one holding it back.
+
+Two more things that ruined runs before they started: full throttle from a standstill loops the bike
+out, and throttle while the nose is up or the bike is leaned over cannot be steered. `LaunchThrottle`,
+`WheeliePitch` and `UprightThrottle` cut power for those, and `LineTolerance` slows it right down when
+it is off the line so there is grip left to steer back with.
 
 ### It is not driving at all
 

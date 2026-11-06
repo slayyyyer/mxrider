@@ -58,6 +58,11 @@ struct Config {
     double maxSteerRate  = 8.0;   // stick units per second: how fast the bars may be turned
     double maxThrottleRate = 6.0; // trigger units per second
     double minSpeed      = 8.0;   // never ask for less than this, however tight the bend
+    double lineTolerance = 6.0;   // units off the line that still count as on it when planning speed
+    double launchSpeed   = 6.0;   // below this speed the throttle is capped, so it cannot loop out
+    double launchThrottle = 0.55; // ...at this much throttle
+    double wheeliePitch  = 12.0;  // nose up this far starts cutting the power
+    double uprightThrottle = 0.80;// leaned past this, power is cut proportionally
 
     // [Pad] which physical control of the virtual pad carries which game input. The defaults
     // match the layout documented in README.md; bind the game's controller settings to match.

@@ -154,6 +154,23 @@ Action RateLimited(const Action& want, const Action& previous, double dt, const 
     return out;
 }
 
+// How much throttle the bike can actually use right now. Two things ruined whole runs without any
+// input from the steering: pinning the throttle from a standstill loops the bike out, and asking
+// for power with the nose in the air or the bike on its side cannot steer, so it goes down.
+double ThrottleCeiling(const Config& cfg, const State& s)
+{
+    double ceiling = 1.0;
+    if (s.forwardSpeed < cfg.launchSpeed && ceiling > cfg.launchThrottle)
+        ceiling = cfg.launchThrottle;
+    if (s.pitchDeg > cfg.wheeliePitch) {
+        const double fade = 1.0 - (s.pitchDeg - cfg.wheeliePitch) / 20.0;
+        ceiling *= Clamp(fade, 0.0, 1.0);
+    }
+    if (s.upright < cfg.uprightThrottle)
+        ceiling *= Clamp(s.upright / cfg.uprightThrottle, 0.0, 1.0);
+    return Clamp(ceiling, 0.0, 1.0);
+}
+
 // Turns the projection onto the line into a steering target. Pure pursuit: aim at a point a
 // little way ahead, plus a nudge away from the line's centre.
 Action BaselineAction(const State& s)
@@ -185,11 +202,23 @@ Action BaselineAction(const State& s)
 
     // Hold the speed the line allows. The front wheel does the stopping and a little rear brake
     // trails it, so the bike keeps rotating into the bend instead of standing up and running wide.
-    const double target = SpeedTarget(cfg);
+    double target = SpeedTarget(cfg);
+
+    // Being off the line is a speed problem before it is a steering problem. Every resume after a
+    // crash started 30 to 55 units off the line and asked for full throttle, and the bike went
+    // down again within two seconds: once the rear is spinning there is no grip left to turn back.
+    // Grip scales with (1 + (offset / tolerance)^2), so 6 units off halves the target and 20 units
+    // off leaves little more than walking pace.
+    const double offLine = std::fabs(g_projection.crossTrack);
+    const double ratio = offLine / (cfg.lineTolerance > 0.1 ? cfg.lineTolerance : 6.0);
+    const double recovery = cfg.targetSpeed / (1.0 + ratio * ratio);
+    if (recovery < target)
+        target = recovery;
+
     g_lastTarget = target;
     const double speedError = target - s.forwardSpeed;
     if (speedError > 0.0) {
-        a.throttle = Clamp(speedError * cfg.speedGain, 0.0, 1.0);
+        a.throttle = Clamp(speedError * cfg.speedGain, 0.0, ThrottleCeiling(cfg, s));
     } else {
         const double brake = Clamp(-speedError * cfg.speedGain, 0.0, 1.0);
         a.brakeFront = brake;

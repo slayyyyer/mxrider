@@ -212,6 +212,11 @@ void ReloadConfig()
     c.maxSteerRate   = ReadDouble(L"Line", L"MaxSteerRate", c.maxSteerRate);
     c.maxThrottleRate = ReadDouble(L"Line", L"MaxThrottleRate", c.maxThrottleRate);
     c.minSpeed    = ReadDouble(L"Line", L"MinSpeed", c.minSpeed);
+    c.lineTolerance = ReadDouble(L"Line", L"LineTolerance", c.lineTolerance);
+    c.launchSpeed = ReadDouble(L"Line", L"LaunchSpeed", c.launchSpeed);
+    c.launchThrottle = ReadDouble(L"Line", L"LaunchThrottle", c.launchThrottle);
+    c.wheeliePitch = ReadDouble(L"Line", L"WheeliePitch", c.wheeliePitch);
+    c.uprightThrottle = ReadDouble(L"Line", L"UprightThrottle", c.uprightThrottle);
 
     c.frontBrakeTrigger = ReadInt(L"Pad", L"FrontBrakeTrigger", c.frontBrakeTrigger);
     c.clutchButton      = ReadInt(L"Pad", L"ClutchButton", c.clutchButton);
@@ -249,6 +254,11 @@ void ReloadConfig()
     c.maxSteerRate      = Clamp(c.maxSteerRate, 0.5, 200.0);
     c.maxThrottleRate   = Clamp(c.maxThrottleRate, 0.2, 200.0);
     c.minSpeed          = Clamp(c.minSpeed, 0.0, 200.0);
+    c.lineTolerance     = Clamp(c.lineTolerance, 0.5, 100.0);
+    c.launchSpeed       = Clamp(c.launchSpeed, 0.0, 100.0);
+    c.launchThrottle    = Clamp(c.launchThrottle, 0.05, 1.0);
+    c.wheeliePitch      = Clamp(c.wheeliePitch, 1.0, 80.0);
+    c.uprightThrottle   = Clamp(c.uprightThrottle, 0.05, 1.0);
     c.frontBrakeTrigger = c.frontBrakeTrigger != 0 ? 1 : 0;
     c.stickDeadzone     = Clamp(c.stickDeadzone, 0.0, 0.5);
     c.csvFlushSeconds   = Clamp(c.csvFlushSeconds, 0.25, 60.0);
